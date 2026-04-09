@@ -704,3 +704,37 @@ async function processPCMStream(response) {
     }
   }
 }
+
+browser.commands.onCommand.addListener((command) => {
+  if (command === "read-selected-text") {
+    browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+      browser.tabs.executeScript(tabs[0].id, {
+        code: "window.getSelection().toString();",
+      }).then((results) => {
+        const selectedText = results[0];
+        if (selectedText) {
+          processText(selectedText);
+        }
+      });
+    });
+  } else if (command === "stop-playback") {
+    stopRequested = true;
+    pcmStreamStopped = true;
+    audioQueue.forEach(url => URL.revokeObjectURL(url));
+    audioQueue = [];
+    isPlaying = false;
+    setPlaybackState("idle");
+    if (currentAbortController) {
+      currentAbortController.abort();
+      currentAbortController = null;
+    }
+    if (audioContext) {
+      audioContext.close();
+      audioContext = null;
+    }
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+  }
+});

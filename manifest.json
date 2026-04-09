@@ -4,7 +4,7 @@
   "author": "BassGaming",
   "description": "TTS implementation for the OpenAI api format. Click 'Read Selected Text' in the context menu after highlighting text.",
   "version": "1.5.2",
-  "permissions": ["storage", "contextMenus", "activeTab", "tabs", "downloads","<all_urls>"],
+  "permissions": ["storage", "contextMenus", "activeTab", "tabs", "downloads", "<all_urls>"],
   "content_security_policy": "default-src 'self'; style-src 'unsafe-inline'; connect-src 'self' http://localhost:* http://127.0.0.1:* http://host.docker.internal:* https: http:; media-src 'self' blob:;",
   "background": {
     "scripts": ["shared/config.js", "shared/notifications.js", "background.js"],
@@ -12,7 +12,21 @@
   },
   "options_ui": {
     "page": "options.html",
-    "chrome_style": true
+    "open_in_tab": true
+  },
+  "commands": {
+    "read-selected-text": {
+      "suggested_key": {
+        "default": "Alt+Shift+R"
+      },
+      "description": "Read selected text"
+    },
+    "stop-playback": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "Stop playback"
+    }
   },
   "icons": {
     "48": "icons/icon.png"
@@ -22,14 +36,12 @@
     "default_icon": "icons/icon.png",
     "default_title": "Custom TTS Reader"
   },
-"browser_specific_settings": {
+  "browser_specific_settings": {
     "gecko": {
       "id": "{cfc0ee5e-1bc1-4e83-95b9-98b530ba7403}",
       "strict_min_version": "79.0",
       "data_collection_permissions": {
-        "required": [
-          "none"
-        ],
+        "required": ["none"],
         "optional": []
       }
     },
