@@ -36,6 +36,15 @@ const VOLUME_LIMITS = {
   max: 1
 };
 
+const KOKORO_VOICES = [
+  { group: 'American Female', voices: ['af_alex', 'af_alva', 'af_bella', 'af_heart', 'af_kore', 'af_nicole', 'af_nova', 'af_river', 'af_sarah', 'af_sky'] },
+  { group: 'American Male', voices: ['am_adam', 'am_eric', 'am_fenrir', 'am_liam', 'am_michael', 'am_onyx', 'am_puck'] },
+  { group: 'British Female', voices: ['bf_alice', 'bf_emma', 'bf_isabella', 'bf_lily'] },
+  { group: 'British Male', voices: ['bm_daniel', 'bm_fable', 'bm_george', 'bm_lewis'] },
+  { group: 'Spanish Female', voices: ['ef_dora'] },
+  { group: 'Spanish Male', voices: ['em_alex', 'em_santa'] }
+];
+
 /**
  * Load settings from browser storage
  * @returns {Promise<TTSSettings>}
@@ -78,33 +87,102 @@ async function saveSettings(settings) {
 }
 
 /**
- * Validate settings input
- * @param {TTSSettings} settings - Settings to validate
- * @returns {{valid: boolean, errors: string[]}}
+ * Read the current settings from the form elements
+ * @param {Object} elements - DOM elements
+ * @returns {TTSSettings}
  */
-function validateSettings(settings) {
-  const errors = [];
-  
-  if (!settings.apiUrl || settings.apiUrl.trim() === '') {
-    errors.push('API URL cannot be empty.');
-  }
-  
-  if (isNaN(settings.speechSpeed) || 
-      settings.speechSpeed < SPEED_LIMITS.min || 
-      settings.speechSpeed > SPEED_LIMITS.max) {
-    errors.push(`Speech speed must be between ${SPEED_LIMITS.min} and ${SPEED_LIMITS.max}.`);
-  }
-  
-  if (isNaN(settings.outputVolume) || 
-      settings.outputVolume < VOLUME_LIMITS.min || 
-      settings.outputVolume > VOLUME_LIMITS.max) {
-    errors.push(`Volume must be between ${VOLUME_LIMITS.min} and ${VOLUME_LIMITS.max}.`);
-  }
-  
+function collectSettings(elements) {
   return {
-    valid: errors.length === 0,
-    errors
+    apiUrl: elements.apiUrlInput.value.trim(),
+    apiKey: elements.apiKeyInput.value.trim(),
+    speechSpeed: parseFloat(elements.speedInput.value),
+    voice: elements.voiceInput.value.trim(),
+    model: elements.modelInput.value.trim(),
+    streamingMode: elements.streamingModeInput.checked,
+    downloadMode: elements.downloadModeInput.checked,
+    outputVolume: parseFloat(elements.volumeInput.value)
   };
+}
+
+/**
+ * Briefly highlight an invalid input
+ * @param {HTMLElement} element - Input to highlight
+ */
+function flashInvalid(element) {
+  element.classList.add('invalid');
+  setTimeout(() => element.classList.remove('invalid'), 1200);
+}
+
+/**
+ * Save the current form state. Invalid fields are reverted to their
+ * last saved values and highlighted instead of raising an alert.
+ * @param {Object} elements - DOM elements
+ * @returns {Promise<void>}
+ */
+async function saveCurrentSettings(elements) {
+  const settings = collectSettings(elements);
+  const saved = await loadSettings();
+  let reverted = false;
+
+  const revert = (element, value) => {
+    element.value = value;
+    flashInvalid(element);
+    reverted = true;
+  };
+
+  if (settings.apiUrl === '') {
+    revert(elements.apiUrlInput, saved.apiUrl);
+  }
+  if (isNaN(settings.speechSpeed) ||
+      settings.speechSpeed < SPEED_LIMITS.min ||
+      settings.speechSpeed > SPEED_LIMITS.max) {
+    revert(elements.speedInput, saved.speechSpeed);
+  }
+  if (isNaN(settings.outputVolume) ||
+      settings.outputVolume < VOLUME_LIMITS.min ||
+      settings.outputVolume > VOLUME_LIMITS.max) {
+    revert(elements.volumeInput, saved.outputVolume);
+  }
+
+  if (reverted) return;
+
+  try {
+    await saveSettings(settings);
+  } catch (error) {
+    console.error('Error saving settings:', error);
+  }
+}
+
+/**
+ * Save settings automatically: on commit (blur/Enter/dropdown pick/toggle)
+ * of any field, and shortly after typing stops (covers closing the popup
+ * without a blur).
+ * @param {Object} elements - DOM elements
+ */
+function setupAutoSave(elements) {
+  const inputs = [
+    elements.apiUrlInput,
+    elements.apiKeyInput,
+    elements.speedInput,
+    elements.voiceInput,
+    elements.modelInput,
+    elements.streamingModeInput,
+    elements.downloadModeInput,
+    elements.volumeInput
+  ];
+
+  let debounceTimer = null;
+  const scheduleSave = () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => saveCurrentSettings(elements), 600);
+  };
+
+  inputs.forEach((input) => {
+    input.addEventListener('change', () => saveCurrentSettings(elements));
+    if (input.type === 'text' || input.type === 'number' || input.type === 'range') {
+      input.addEventListener('input', scheduleSave);
+    }
+  });
 }
 
 /**
@@ -147,35 +225,75 @@ function setupModeExclusivity(elements) {
 }
 
 /**
- * Handle save button click
- * @param {Object} elements - DOM elements
- * @returns {Promise<void>}
+ * Rebuild the voice datalist, keeping only groups/voices matching the queries.
+ * An empty query list shows everything.
+ * @param {HTMLDataListElement} datalist - The datalist to populate
+ * @param {string[]} queries - Lowercase search terms (empty string = no filter)
  */
-async function handleSave(elements) {
-  const settings = {
-    apiUrl: elements.apiUrlInput.value.trim(),
-    apiKey: elements.apiKeyInput.value.trim(),
-    speechSpeed: parseFloat(elements.speedInput.value),
-    voice: elements.voiceInput.value.trim(),
-    model: elements.modelInput.value.trim(),
-    streamingMode: elements.streamingModeInput.checked,
-    downloadMode: elements.downloadModeInput.checked,
-    outputVolume: parseFloat(elements.volumeInput.value)
-  };
+function buildVoiceOptions(datalist, queries) {
+  const matchVoice = (query, text) => query === '' || text.toLowerCase().includes(query);
+  const matchGroup = (query, text) =>
+    query === '' || new RegExp(`\\b${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(text.toLowerCase());
 
-  const validation = validateSettings(settings);
-  
-  if (!validation.valid) {
-    alert(validation.errors.join('\n'));
-    return;
-  }
+  datalist.replaceChildren();
+  for (const entry of KOKORO_VOICES) {
+    const groupLower = entry.group.toLowerCase();
+    const matchingVoices = entry.voices.filter((voice) =>
+      queries.some((q) => matchVoice(q, voice) || matchGroup(q, groupLower))
+    );
+    if (matchingVoices.length === 0) continue;
 
-  try {
-    await saveSettings(settings);
-    alert('Settings saved!');
-  } catch (error) {
-    alert(error.message || 'Failed to save settings.');
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = entry.group;
+    for (const voice of matchingVoices) {
+      const option = document.createElement('option');
+      option.value = voice;
+      option.label = `${voice} (${entry.group})`;
+      optgroup.appendChild(option);
+    }
+    datalist.appendChild(optgroup);
   }
+}
+
+/**
+ * Attach a dropdown of known Kokoro voices to the voice input.
+ * The list filters while typing, matching voice names and group names
+ * (e.g. "spanish" shows the Spanish groups). Free typing of
+ * "voice1+voice2" mixes still works.
+ * @param {Object} elements - DOM elements
+ */
+function setupVoiceSuggestions(elements) {
+  const datalist = document.createElement('datalist');
+  datalist.id = 'voiceList';
+
+  buildVoiceOptions(datalist, ['']);
+  document.body.appendChild(datalist);
+  elements.voiceInput.setAttribute('list', 'voiceList');
+
+  const knownVoices = new Set(KOKORO_VOICES.flatMap((entry) => entry.voices));
+  let pickedSuggestion = false;
+
+  elements.voiceInput.addEventListener('change', () => {
+    pickedSuggestion = knownVoices.has(elements.voiceInput.value.trim());
+  });
+
+  elements.voiceInput.addEventListener('input', () => {
+    // Defer the rebuild out of the event task: mutating the datalist
+    // synchronously right after a selection makes Firefox reopen the
+    // suggestion popup. When a suggestion was just picked, restore the
+    // full list so the next time the popup opens it shows all voices.
+    setTimeout(() => {
+      const wasPicked = pickedSuggestion;
+      pickedSuggestion = false;
+      if (wasPicked) {
+        buildVoiceOptions(datalist, ['']);
+        return;
+      }
+      const query = elements.voiceInput.value.trim().toLowerCase();
+      const queries = query === '' ? [''] : query.split('+');
+      buildVoiceOptions(datalist, queries);
+    }, 0);
+  });
 }
 
 /**

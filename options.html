@@ -46,6 +46,10 @@
       box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.2);
     }
 
+    input.invalid {
+      border-color: #ff5252;
+    }
+
     button {
       width: 100%;
       padding: 14px;
@@ -145,7 +149,6 @@
   </div>
   <label for="volume">Volume:</label>
   <input type="range" id="volume" min="0" max="1" step="0.01" value="1.0">
-  <button id="saveButton">Save Settings</button>
   <button id="stopButton">Stop Playback</button>
 
   <script src="shared/settings.js"></script>
