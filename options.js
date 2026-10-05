@@ -10,7 +10,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     volumeInput: document.getElementById("volume"),
     streamingWarning: document.getElementById("streamingWarning"),
     downloadWarning: document.getElementById("downloadWarning"),
-    saveButton: document.getElementById("saveButton"),
     stopButton: document.getElementById("stopButton")
   };
 
@@ -20,8 +19,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Setup mode exclusivity
   setupModeExclusivity(elements);
 
-  // Save settings
-  elements.saveButton.addEventListener("click", () => handleSave(elements));
+  // Setup voice dropdown suggestions
+  setupVoiceSuggestions(elements);
+
+  // Auto-save settings on change
+  setupAutoSave(elements);
 
   // Stop playback
   elements.stopButton.addEventListener("click", handleStopPlayback);

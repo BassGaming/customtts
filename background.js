@@ -155,6 +155,14 @@ browser.runtime.onMessage.addListener((message) => {
   if (message.action === "getPlaybackState") {
     return Promise.resolve({ playbackState });
   }
+
+  if (message.action === "readSelection" && message.text) {
+    if (downloadMode && isMobile) {
+      processMobileDownload(message.text);
+    } else {
+      processText(message.text);
+    }
+  }
 });
 
 function createContextMenu() {

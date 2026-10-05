@@ -10,12 +10,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     volumeInput: document.getElementById("volume"),
     streamingWarning: document.getElementById("streamingWarning"),
     downloadWarning: document.getElementById("downloadWarning"),
-    saveButton: document.getElementById("saveButton"),
     stopButton: document.getElementById("stopButton"),
     playButton: document.getElementById("playButton"),
     pauseButton: document.getElementById("pauseButton"),
-    tabButtons: document.querySelectorAll(".tab-button"),
-    tabPanels: document.querySelectorAll(".tab-panel")
+    speedValue: document.getElementById("speedValue")
   };
 
   // Initialize UI with saved settings
@@ -24,8 +22,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Setup mode exclusivity
   setupModeExclusivity(elements);
 
-  // Save settings
-  elements.saveButton.addEventListener("click", () => handleSave(elements));
+  // Setup voice dropdown suggestions
+  setupVoiceSuggestions(elements);
+
+  // Auto-save settings on change
+  setupAutoSave(elements);
+
+  // Keep the speed readout in sync with the slider
+  elements.speedValue.textContent = elements.speedInput.value;
+  elements.speedInput.addEventListener("input", () => {
+    elements.speedValue.textContent = elements.speedInput.value;
+  });
 
   // Stop playback
   elements.stopButton.addEventListener("click", handleStopPlayback);
@@ -64,22 +71,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   elements.pauseButton.addEventListener("click", async () => {
     await browser.runtime.sendMessage({ action: "pausePlayback" });
     await updateTransportState();
-  });
-
-  // Tab switching
-  elements.tabButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const targetTab = button.dataset.tab;
-
-      elements.tabButtons.forEach((b) => b.classList.toggle("active", b === button));
-      elements.tabPanels.forEach((panel) => {
-        panel.classList.toggle("active", panel.id === `${targetTab}Tab`);
-      });
-
-      if (targetTab === "play") {
-        updateTransportState();
-      }
-    });
   });
 
   // Initial transport state
