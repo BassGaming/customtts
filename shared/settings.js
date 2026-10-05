@@ -37,12 +37,23 @@ const VOLUME_LIMITS = {
 };
 
 const KOKORO_VOICES = [
-  { group: 'American Female', voices: ['af_alex', 'af_alva', 'af_bella', 'af_heart', 'af_kore', 'af_nicole', 'af_nova', 'af_river', 'af_sarah', 'af_sky'] },
-  { group: 'American Male', voices: ['am_adam', 'am_eric', 'am_fenrir', 'am_liam', 'am_michael', 'am_onyx', 'am_puck'] },
+  { group: 'American Female', voices: ['af_alloy', 'af_aoede', 'af_bella', 'af_heart', 'af_jessica', 'af_kore', 'af_nicole', 'af_nova', 'af_river', 'af_sarah', 'af_sky'] },
+  { group: 'American Male', voices: ['am_adam', 'am_echo', 'am_eric', 'am_fenrir', 'am_liam', 'am_michael', 'am_onyx', 'am_puck', 'am_santa'] },
   { group: 'British Female', voices: ['bf_alice', 'bf_emma', 'bf_isabella', 'bf_lily'] },
   { group: 'British Male', voices: ['bm_daniel', 'bm_fable', 'bm_george', 'bm_lewis'] },
+  { group: 'Japanese Female', voices: ['jf_alpha', 'jf_gongitsune', 'jf_nezumi', 'jf_tebukuro'] },
+  { group: 'Japanese Male', voices: ['jm_kumo'] },
+  { group: 'Mandarin Chinese Female', voices: ['zf_xiaobei', 'zf_xiaoni', 'zf_xiaoxiao', 'zf_xiaoyi'] },
+  { group: 'Mandarin Chinese Male', voices: ['zm_yunjian', 'zm_yunxi', 'zm_yunxia', 'zm_yunyang'] },
   { group: 'Spanish Female', voices: ['ef_dora'] },
-  { group: 'Spanish Male', voices: ['em_alex', 'em_santa'] }
+  { group: 'Spanish Male', voices: ['em_alex', 'em_santa'] },
+  { group: 'French Female', voices: ['ff_siwis'] },
+  { group: 'Hindi Female', voices: ['hf_alpha', 'hf_beta'] },
+  { group: 'Hindi Male', voices: ['hm_omega', 'hm_psi'] },
+  { group: 'Italian Female', voices: ['if_sara'] },
+  { group: 'Italian Male', voices: ['im_nicola'] },
+  { group: 'Brazilian Portuguese Female', voices: ['pf_dora'] },
+  { group: 'Brazilian Portuguese Male', voices: ['pm_alex', 'pm_santa'] }
 ];
 
 /**
@@ -225,21 +236,35 @@ function setupModeExclusivity(elements) {
 }
 
 /**
- * Rebuild the voice datalist, keeping only groups/voices matching the queries.
- * An empty query list shows everything.
+ * Rebuild the voice datalist for the token currently being typed.
+ *
+ * The voice field can hold several voices joined by "+". The part after the
+ * last "+" is the token being searched and the prefix (everything up to and
+ * including that "+") is re-added to every option. This lets a fresh
+ * suggestion list appear after a "+" and makes picking an option keep the
+ * voices already entered.
+ *
+ * Firefox filters datalist suggestions using an option's label only, so the
+ * label has to contain the current input for a combined value to be listed.
+ *
  * @param {HTMLDataListElement} datalist - The datalist to populate
- * @param {string[]} queries - Lowercase search terms (empty string = no filter)
+ * @param {string} prefix - Text to prepend to every option (e.g. "af_bella+")
+ * @param {string} token - Lowercase search term for the current voice
+ * @param {string} fullInput - Current voice input, kept in labels for Firefox
+ * @returns {Set<string>} Full option values that were offered
  */
-function buildVoiceOptions(datalist, queries) {
-  const matchVoice = (query, text) => query === '' || text.toLowerCase().includes(query);
-  const matchGroup = (query, text) =>
-    query === '' || new RegExp(`\\b${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(text.toLowerCase());
+function buildVoiceOptions(datalist, prefix, token, fullInput) {
+  const matchVoice = (text) => token === '' || text.toLowerCase().includes(token);
+  const matchGroup = (text) =>
+    token === '' ||
+    new RegExp(`\\b${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(text.toLowerCase());
 
+  const offered = new Set();
   datalist.replaceChildren();
+
   for (const entry of KOKORO_VOICES) {
-    const groupLower = entry.group.toLowerCase();
-    const matchingVoices = entry.voices.filter((voice) =>
-      queries.some((q) => matchVoice(q, voice) || matchGroup(q, groupLower))
+    const matchingVoices = entry.voices.filter(
+      (voice) => matchVoice(voice) || matchGroup(entry.group)
     );
     if (matchingVoices.length === 0) continue;
 
@@ -247,34 +272,63 @@ function buildVoiceOptions(datalist, queries) {
     optgroup.label = entry.group;
     for (const voice of matchingVoices) {
       const option = document.createElement('option');
-      option.value = voice;
-      option.label = `${voice} (${entry.group})`;
+      option.value = prefix + voice;
+      option.label = prefix === ''
+        ? `${voice} (${entry.group})`
+        : `${voice} (${entry.group}) ${fullInput}`;
       optgroup.appendChild(option);
+      offered.add(prefix + voice);
     }
     datalist.appendChild(optgroup);
   }
+
+  return offered;
 }
 
 /**
  * Attach a dropdown of known Kokoro voices to the voice input.
  * The list filters while typing, matching voice names and group names
- * (e.g. "spanish" shows the Spanish groups). Free typing of
- * "voice1+voice2" mixes still works.
+ * (e.g. "spanish" shows the Spanish groups). Typing "+" after a voice opens
+ * a new list, so voices can be combined (e.g. "af_bella+bf_emma"). The list
+ * is hidden unless the model field is "kokoro", since these voices only
+ * exist on Kokoro-based services.
  * @param {Object} elements - DOM elements
  */
 function setupVoiceSuggestions(elements) {
   const datalist = document.createElement('datalist');
   datalist.id = 'voiceList';
-
-  buildVoiceOptions(datalist, ['']);
   document.body.appendChild(datalist);
   elements.voiceInput.setAttribute('list', 'voiceList');
 
-  const knownVoices = new Set(KOKORO_VOICES.flatMap((entry) => entry.voices));
+  let offeredValues = new Set();
   let pickedSuggestion = false;
 
+  const isKokoro = () =>
+    elements.modelInput.value.trim().toLowerCase() === 'kokoro';
+
+  const currentParts = () => {
+    const fullInput = elements.voiceInput.value;
+    const plus = fullInput.lastIndexOf('+');
+    return plus >= 0
+      ? { prefix: fullInput.slice(0, plus + 1), token: fullInput.slice(plus + 1).trim().toLowerCase(), fullInput }
+      : { prefix: '', token: fullInput.trim().toLowerCase(), fullInput };
+  };
+
+  const refresh = () => {
+    if (!isKokoro()) {
+      offeredValues = new Set();
+      datalist.replaceChildren();
+      return;
+    }
+    const { prefix, token, fullInput } = currentParts();
+    offeredValues = buildVoiceOptions(datalist, prefix, token, fullInput);
+  };
+
+  elements.modelInput.addEventListener('input', refresh);
+  elements.modelInput.addEventListener('change', refresh);
+
   elements.voiceInput.addEventListener('change', () => {
-    pickedSuggestion = knownVoices.has(elements.voiceInput.value.trim());
+    pickedSuggestion = offeredValues.has(elements.voiceInput.value);
   });
 
   elements.voiceInput.addEventListener('input', () => {
@@ -286,14 +340,14 @@ function setupVoiceSuggestions(elements) {
       const wasPicked = pickedSuggestion;
       pickedSuggestion = false;
       if (wasPicked) {
-        buildVoiceOptions(datalist, ['']);
+        offeredValues = isKokoro() ? buildVoiceOptions(datalist, '', '', '') : new Set();
         return;
       }
-      const query = elements.voiceInput.value.trim().toLowerCase();
-      const queries = query === '' ? [''] : query.split('+');
-      buildVoiceOptions(datalist, queries);
+      refresh();
     }, 0);
   });
+
+  refresh();
 }
 
 /**
