@@ -30,7 +30,7 @@
                 font-size: 0.82em;
             }
 
-            input {
+            input, textarea {
                 width: 100%;
                 padding: 4px 6px;
                 margin: 0 0 6px;
@@ -39,7 +39,12 @@
                 border-radius: 3px;
                 color: #ffffff;
                 font-size: 12px;
+                font-family: inherit;
                 box-sizing: border-box;
+            }
+
+            textarea {
+                resize: vertical;
             }
 
             button {
@@ -215,6 +220,9 @@
 
             <label for="model">Model:</label>
             <input type="text" id="model" placeholder="Model name" />
+
+            <label for="instructions">Voice Instructions:</label>
+            <textarea id="instructions" rows="2" placeholder="e.g. Speak in a cheerful tone"></textarea>
 
             <div class="toggle-container">
                 <label class="toggle-label">

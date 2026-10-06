@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     speedInput: document.getElementById("speed"),
     voiceInput: document.getElementById("voice"),
     modelInput: document.getElementById("model"),
+    instructionsInput: document.getElementById("instructions"),
     streamingModeInput: document.getElementById("streamingMode"),
     downloadModeInput: document.getElementById("downloadMode"),
     volumeInput: document.getElementById("volume"),

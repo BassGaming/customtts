@@ -10,6 +10,7 @@
  * @property {number} speechSpeed - Speech playback speed (0.1-10.0)
  * @property {string} voice - Voice identifier
  * @property {string} model - TTS model name
+ * @property {string} instructions - Voice style instructions (OpenAI gpt-4o-mini-tts)
  * @property {boolean} streamingMode - Whether to use PCM streaming
  * @property {boolean} downloadMode - Whether to download audio files
  * @property {number} outputVolume - Audio volume (0-1)
@@ -21,6 +22,7 @@ const DEFAULT_SETTINGS = {
   voice: 'af_bella+bf_emma+af_nicole',
   speechSpeed: 1.0,
   model: 'kokoro',
+  instructions: '',
   streamingMode: false,
   downloadMode: false,
   outputVolume: 1.0
@@ -56,6 +58,35 @@ const KOKORO_VOICES = [
   { group: 'Brazilian Portuguese Male', voices: ['pm_alex', 'pm_santa'] }
 ];
 
+const OPENAI_TTS_VOICES = [
+  { group: 'OpenAI gpt-4o-mini-tts', voices: ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse', 'marin', 'cedar'] }
+];
+
+const OPENAI_TTS1_VOICES = [
+  { group: 'OpenAI tts-1', voices: ['alloy', 'ash', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer'] }
+];
+
+/**
+ * Pick the voice list for a model. Only models whose voices we know about
+ * return a source; anything else (any other OpenAI-compatible service) gets
+ * no suggestions. Kokoro supports "+"-joined voice mixes, OpenAI voices don't.
+ * @param {string} model - Model name from the settings field
+ * @returns {{groups: Array, multi: boolean}|null}
+ */
+function getVoiceSource(model) {
+  const name = (model || '').trim().toLowerCase();
+  if (name === 'kokoro') {
+    return { groups: KOKORO_VOICES, multi: true };
+  }
+  if (name.startsWith('gpt-4o-mini-tts')) {
+    return { groups: OPENAI_TTS_VOICES, multi: false };
+  }
+  if (name === 'tts-1' || name === 'tts-1-hd') {
+    return { groups: OPENAI_TTS1_VOICES, multi: false };
+  }
+  return null;
+}
+
 /**
  * Load settings from browser storage
  * @returns {Promise<TTSSettings>}
@@ -64,7 +95,7 @@ async function loadSettings() {
   try {
     const data = await browser.storage.local.get([
       'apiUrl', 'apiKey', 'speechSpeed', 'voice', 
-      'model', 'streamingMode', 'downloadMode', 'outputVolume'
+      'model', 'instructions', 'streamingMode', 'downloadMode', 'outputVolume'
     ]);
     
     return {
@@ -73,6 +104,7 @@ async function loadSettings() {
       voice: data.voice || DEFAULT_SETTINGS.voice,
       speechSpeed: data.speechSpeed || DEFAULT_SETTINGS.speechSpeed,
       model: data.model || DEFAULT_SETTINGS.model,
+      instructions: data.instructions || DEFAULT_SETTINGS.instructions,
       streamingMode: data.streamingMode || DEFAULT_SETTINGS.streamingMode,
       downloadMode: data.downloadMode || DEFAULT_SETTINGS.downloadMode,
       outputVolume: data.outputVolume ?? DEFAULT_SETTINGS.outputVolume
@@ -109,6 +141,7 @@ function collectSettings(elements) {
     speechSpeed: parseFloat(elements.speedInput.value),
     voice: elements.voiceInput.value.trim(),
     model: elements.modelInput.value.trim(),
+    instructions: elements.instructionsInput.value.trim(),
     streamingMode: elements.streamingModeInput.checked,
     downloadMode: elements.downloadModeInput.checked,
     outputVolume: parseFloat(elements.volumeInput.value)
@@ -177,6 +210,7 @@ function setupAutoSave(elements) {
     elements.speedInput,
     elements.voiceInput,
     elements.modelInput,
+    elements.instructionsInput,
     elements.streamingModeInput,
     elements.downloadModeInput,
     elements.volumeInput
@@ -190,7 +224,8 @@ function setupAutoSave(elements) {
 
   inputs.forEach((input) => {
     input.addEventListener('change', () => saveCurrentSettings(elements));
-    if (input.type === 'text' || input.type === 'number' || input.type === 'range') {
+    if (input.type === 'text' || input.type === 'number' ||
+        input.type === 'range' || input.type === 'textarea') {
       input.addEventListener('input', scheduleSave);
     }
   });
@@ -208,6 +243,7 @@ async function initializeUI(elements) {
   elements.voiceInput.value = settings.voice;
   elements.speedInput.value = settings.speechSpeed;
   elements.modelInput.value = settings.model;
+  elements.instructionsInput.value = settings.instructions;
   elements.streamingModeInput.checked = settings.streamingMode;
   elements.downloadModeInput.checked = settings.downloadMode;
   elements.volumeInput.value = settings.outputVolume;
@@ -248,12 +284,13 @@ function setupModeExclusivity(elements) {
  * label has to contain the current input for a combined value to be listed.
  *
  * @param {HTMLDataListElement} datalist - The datalist to populate
+ * @param {Array<{group: string, voices: string[]}>} groups - Voice groups to list
  * @param {string} prefix - Text to prepend to every option (e.g. "af_bella+")
  * @param {string} token - Lowercase search term for the current voice
  * @param {string} fullInput - Current voice input, kept in labels for Firefox
  * @returns {Set<string>} Full option values that were offered
  */
-function buildVoiceOptions(datalist, prefix, token, fullInput) {
+function buildVoiceOptions(datalist, groups, prefix, token, fullInput) {
   const matchVoice = (text) => token === '' || text.toLowerCase().includes(token);
   const matchGroup = (text) =>
     token === '' ||
@@ -262,7 +299,7 @@ function buildVoiceOptions(datalist, prefix, token, fullInput) {
   const offered = new Set();
   datalist.replaceChildren();
 
-  for (const entry of KOKORO_VOICES) {
+  for (const entry of groups) {
     const matchingVoices = entry.voices.filter(
       (voice) => matchVoice(voice) || matchGroup(entry.group)
     );
@@ -286,12 +323,10 @@ function buildVoiceOptions(datalist, prefix, token, fullInput) {
 }
 
 /**
- * Attach a dropdown of known Kokoro voices to the voice input.
- * The list filters while typing, matching voice names and group names
- * (e.g. "spanish" shows the Spanish groups). Typing "+" after a voice opens
- * a new list, so voices can be combined (e.g. "af_bella+bf_emma"). The list
- * is hidden unless the model field is "kokoro", since these voices only
- * exist on Kokoro-based services.
+ * Attach a dropdown of known voices to the voice input. The list depends on
+ * the model: Kokoro voices (mixable with "+") for "kokoro", the OpenAI voice
+ * set for OpenAI TTS models, and nothing for any other service. While typing,
+ * the list filters by voice name and group name (e.g. "spanish", "british").
  * @param {Object} elements - DOM elements
  */
 function setupVoiceSuggestions(elements) {
@@ -303,25 +338,29 @@ function setupVoiceSuggestions(elements) {
   let offeredValues = new Set();
   let pickedSuggestion = false;
 
-  const isKokoro = () =>
-    elements.modelInput.value.trim().toLowerCase() === 'kokoro';
-
-  const currentParts = () => {
-    const fullInput = elements.voiceInput.value;
-    const plus = fullInput.lastIndexOf('+');
-    return plus >= 0
-      ? { prefix: fullInput.slice(0, plus + 1), token: fullInput.slice(plus + 1).trim().toLowerCase(), fullInput }
-      : { prefix: '', token: fullInput.trim().toLowerCase(), fullInput };
-  };
-
   const refresh = () => {
-    if (!isKokoro()) {
+    const source = getVoiceSource(elements.modelInput.value);
+    if (!source) {
       offeredValues = new Set();
       datalist.replaceChildren();
       return;
     }
-    const { prefix, token, fullInput } = currentParts();
-    offeredValues = buildVoiceOptions(datalist, prefix, token, fullInput);
+
+    const fullInput = elements.voiceInput.value;
+    let prefix = '';
+    let token = fullInput.trim().toLowerCase();
+
+    // Kokoro mixes voices with "+": search only the token after the last "+"
+    // and re-attach the prefix to every suggestion. OpenAI voices are single.
+    if (source.multi) {
+      const plus = fullInput.lastIndexOf('+');
+      if (plus >= 0) {
+        prefix = fullInput.slice(0, plus + 1);
+        token = fullInput.slice(plus + 1).trim().toLowerCase();
+      }
+    }
+
+    offeredValues = buildVoiceOptions(datalist, source.groups, prefix, token, fullInput);
   };
 
   elements.modelInput.addEventListener('input', refresh);
@@ -340,7 +379,10 @@ function setupVoiceSuggestions(elements) {
       const wasPicked = pickedSuggestion;
       pickedSuggestion = false;
       if (wasPicked) {
-        offeredValues = isKokoro() ? buildVoiceOptions(datalist, '', '', '') : new Set();
+        const source = getVoiceSource(elements.modelInput.value);
+        offeredValues = source
+          ? buildVoiceOptions(datalist, source.groups, '', '', '')
+          : new Set();
         return;
       }
       refresh();

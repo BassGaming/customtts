@@ -28,7 +28,7 @@
       font-size: 0.9em;
     }
 
-    input {
+    input, textarea {
       width: 100%;
       padding: 12px;
       margin: 5px 0 15px;
@@ -37,10 +37,15 @@
       border-radius: 6px;
       color: #ffffff;
       font-size: 14px;
+      font-family: inherit;
       transition: all 0.3s ease;
     }
 
-    input:focus {
+    textarea {
+      resize: vertical;
+    }
+
+    input:focus, textarea:focus {
       outline: none;
       border-color: #00bcd4;
       box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.2);
@@ -131,6 +136,9 @@
 
   <label for="model">Model:</label>
   <input type="text" id="model" placeholder="Enter model name">
+
+  <label for="instructions">Voice Instructions:</label>
+  <textarea id="instructions" rows="2" placeholder="e.g. Speak in a cheerful tone"></textarea>
 
   <div class="toggle-container">
     <label class="toggle-label">
