@@ -4,42 +4,50 @@
         <title>TTS Settings</title>
         <style>
             
-            body {
-                font-family: "Segoe UI", Arial, sans-serif;
+            html, body {
                 margin: 0;
-                padding: 10px; 
-                width: 350px;
-                box-sizing: border-box;
                 background-color: #1a1a1a;
                 color: #e0e0e0;
-                overflow: hidden;
+                scrollbar-color: #555 #1a1a1a;
+            }
+
+            body {
+                font-family: "Segoe UI", Arial, sans-serif;
+                padding: 8px 10px; 
+                width: 350px;
+                box-sizing: border-box;
             }
 
             h3 {
                 color: #00bcd4;
-                margin: 0 0 8px 0; 
-                font-size: 15px;
-                padding-bottom: 5px; 
+                margin: 0 0 6px 0; 
+                font-size: 14px;
+                padding-bottom: 4px; 
                 border-bottom: 1px solid #2d2d2d;
             }
 
             label {
                 display: block;
-                margin: 4px 0 2px; 
+                margin: 3px 0 1px; 
                 color: #9e9e9e;
                 font-size: 0.82em;
             }
 
-            input {
+            input, textarea {
                 width: 100%;
-                padding: 4px 6px;
-                margin: 0 0 6px;
+                padding: 3px 6px;
+                margin: 0 0 5px;
                 background-color: #2d2d2d;
                 border: 1px solid #404040;
                 border-radius: 3px;
                 color: #ffffff;
                 font-size: 12px;
+                font-family: inherit;
                 box-sizing: border-box;
+            }
+
+            textarea {
+                resize: vertical;
             }
 
             button {
@@ -57,7 +65,7 @@
             }
 
             .toggle-container {
-                margin: 6px 0;
+                margin: 4px 0;
             }
 
             .toggle-label {
@@ -76,7 +84,7 @@
             .mode-warning {
                 color: #ff9800;
                 font-size: 0.75em; 
-                margin-top: 2px; 
+                margin-top: 1px; 
                 display: none;
                 line-height: 1.2;
             }
@@ -105,16 +113,16 @@
             }
 
             details {
-                margin-top: 10px;
+                margin-top: 8px;
                 border-top: 1px solid #2d2d2d;
-                padding-top: 4px;
+                padding-top: 3px;
             }
 
             summary {
                 cursor: pointer;
                 color: #9e9e9e;
                 font-size: 0.82em;
-                padding: 2px 0;
+                padding: 1px 0;
             }
 
             summary:hover {
@@ -124,14 +132,14 @@
             .transport {
                 display: flex;
                 gap: 10px;
-                margin: 8px 0 14px 0;
+                margin: 6px 0 10px 0;
                 align-items: center;
                 justify-content: center;
             }
 
             .icon-button {
-                width: 48px;
-                height: 48px;
+                width: 44px;
+                height: 44px;
                 display: grid;
                 place-items: center;
                 background: #1f1f1f;
@@ -215,6 +223,9 @@
 
             <label for="model">Model:</label>
             <input type="text" id="model" placeholder="Model name" />
+
+            <label for="instructions">Voice Instructions:</label>
+            <textarea id="instructions" rows="2" placeholder="e.g. Speak in a cheerful tone"></textarea>
 
             <div class="toggle-container">
                 <label class="toggle-label">

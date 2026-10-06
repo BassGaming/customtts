@@ -19,6 +19,7 @@ let apiKey = "";
 let speechSpeed = 1.0;
 let voice = "af_bella+af_sky";
 let model = "kokoro";
+let instructions = "";
 let streamingMode = false;
 let downloadMode = false;
 let isMobile = false;
@@ -39,6 +40,18 @@ let currentAbortController = null;
 
 function setPlaybackState(state) {
   playbackState = state;
+}
+
+/**
+ * Add voice-style instructions to a request payload when one is set.
+ * Only sent when non-empty so OpenAI-compatible services that don't know
+ * the field are unaffected. Used by OpenAI gpt-4o-mini-tts.
+ * @param {Object} payload - Request payload
+ * @returns {Object} The same payload, with instructions when present
+ */
+function applyInstructions(payload) {
+  if (instructions) payload.instructions = instructions;
+  return payload;
 }
 
 browser.runtime.getPlatformInfo().then((info) => {
@@ -80,7 +93,7 @@ function handleMobileClick(tab) {
   try {
     const data = await browser.storage.local.get([
       "apiUrl", "apiKey", "speechSpeed", "voice", 
-      "model", "streamingMode", "downloadMode", "outputVolume"
+      "model", "instructions", "streamingMode", "downloadMode", "outputVolume"
     ]);
     
     apiUrl = data.apiUrl || CONFIG.DEFAULT_API_URL;
@@ -88,6 +101,7 @@ function handleMobileClick(tab) {
     speechSpeed = data.speechSpeed || CONFIG.DEFAULT_SPEED;
     voice = data.voice || CONFIG.DEFAULT_VOICE;
     model = data.model || CONFIG.DEFAULT_MODEL;
+    instructions = data.instructions || "";
     streamingMode = data.streamingMode || false;
     downloadMode = data.downloadMode || false;
     if (gainNode) gainNode.gain.value = data.outputVolume ?? CONFIG.DEFAULT_VOLUME;
@@ -102,6 +116,7 @@ browser.storage.onChanged.addListener((changes) => {
   if (changes.speechSpeed) speechSpeed = changes.speechSpeed.newValue;
   if (changes.voice) voice = changes.voice.newValue;
   if (changes.model) model = changes.model.newValue;
+  if (changes.instructions) instructions = changes.instructions.newValue;
   if (changes.streamingMode) streamingMode = changes.streamingMode.newValue;
   if (changes.downloadMode) downloadMode = changes.downloadMode.newValue;
   if (changes.outputVolume && gainNode) gainNode.gain.value = changes.outputVolume.newValue;
@@ -273,13 +288,13 @@ async function playNextAudio() {
  * @returns {Promise<string>} Object URL for audio blob
  */
 async function fetchSentenceAudio(sentence, signal) {
-  const payload = {
+  const payload = applyInstructions({
     model: model,
     input: sentence,
     voice: voice,
     response_format: "mp3",
     speed: speechSpeed,
-  };
+  });
 
   const headers = {
     "Content-Type": "application/json",
@@ -343,13 +358,13 @@ function processText(text) {
   }
 
   if (streamingMode) {
-    const payload = {
+    const payload = applyInstructions({
       model: model,
       input: text,
       voice: voice,
       response_format: "pcm",
       speed: speechSpeed,
-    };
+    });
 
     const headers = {
       "Content-Type": "application/json",
@@ -388,13 +403,13 @@ function processText(text) {
     if (isMobile) {
       processMobileDownload(text);
     } else {
-      const payload = {
+      const payload = applyInstructions({
         model: model,
         input: text,
         voice: voice,
         response_format: "mp3",
         speed: speechSpeed,
-      };
+      });
 
       const headers = {
         "Content-Type": "application/json",
@@ -474,13 +489,13 @@ function processText(text) {
       
       processSentences();
     } else {
-      const payload = {
+      const payload = applyInstructions({
         model: model,
         input: text,
         voice: voice,
         response_format: "mp3",
         speed: speechSpeed,
-      };
+      });
 
       const headers = {
         "Content-Type": "application/json",
@@ -525,13 +540,13 @@ function processText(text) {
 function processMobileDownload(text) {
   if (!apiUrl) return;
 
-  const payload = {
+  const payload = applyInstructions({
     model: model,
     input: text,
     voice: voice,
     response_format: "mp3",
     speed: speechSpeed,
-  };
+  });
 
   const headers = {
     "Content-Type": "application/json",
